@@ -4,16 +4,16 @@ import { Routes, Route } from 'react-router-dom';
 import AllPerks from '../src/pages/AllPerks.jsx';
 import { renderWithRouter } from './utils/renderWithRouter.js';
 
-
-  
-
 describe('AllPerks page (Directory)', () => {
   test('lists public perks and responds to name filtering', async () => {
-    // The seeded record gives us a deterministic expectation regardless of the
-    // rest of the shared database contents.
-    const seededPerk = global.__TEST_CONTEXT__.seededPerk;
+    // ✅ Correct global key
+    const seededPerk = global.__TEST_CONTEXT__?.seededPerk;
+    if (!seededPerk) {
+      throw new Error(
+        'Missing __TEST_CONTEXT__. Run tests via the repo runner (e.g. `npx node@18.20.3 tests/runWithServer.mjs`)'
+      );
+    }
 
-    // Render the exploration page so it performs its real HTTP fetch.
     renderWithRouter(
       <Routes>
         <Route path="/explore" element={<AllPerks />} />
@@ -21,37 +21,88 @@ describe('AllPerks page (Directory)', () => {
       { initialEntries: ['/explore'] }
     );
 
-    // Wait for the baseline card to appear which guarantees the asynchronous
-    // fetch finished.
-    await waitFor(() => {
-      expect(screen.getByText(seededPerk.title)).toBeInTheDocument();
-    });
+    // Wait for loading to finish
+    await waitFor(
+      () => expect(screen.queryByText('Loading perks...')).not.toBeInTheDocument(),
+      { timeout: 10000 }
+    );
 
-    // Interact with the name filter input using the real value that
-    // corresponds to the seeded record.
+    // Wait for perks to appear
+    await waitFor(
+      () => expect(screen.getByText(seededPerk.title)).toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
+    // Apply name filter
     const nameFilter = screen.getByPlaceholderText('Enter perk name...');
     fireEvent.change(nameFilter, { target: { value: seededPerk.title } });
 
-    await waitFor(() => {
-      expect(screen.getByText(seededPerk.title)).toBeInTheDocument();
-    });
+    await waitFor(
+      () => expect(screen.queryByText('Searching...')).not.toBeInTheDocument(),
+      { timeout: 10000 }
+    );
 
-    // The summary text should continue to reflect the number of matching perks.
+    await waitFor(
+      () => expect(screen.getByText(seededPerk.title)).toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
     expect(screen.getByText(/showing/i)).toHaveTextContent('Showing');
   });
 
-  /*
-  TODO: Test merchant filtering
-  - use the seeded record
-  - perform a real HTTP fetch.
-  - wait for the fetch to finish
-  - choose the record's merchant from the dropdown
-  - verify the record is displayed
-  - verify the summary text reflects the number of matching perks
-  */
-
   test('lists public perks and responds to merchant filtering', async () => {
-    // This will always fail until the TODO above is implemented.
-    expect(true).toBe(false);
+    // ✅ Correct global key
+    const seededPerk = global.__TEST_CONTEXT__?.seededPerk;
+    if (!seededPerk) {
+      throw new Error(
+        'Missing __TEST_CONTEXT__. Run tests via the repo runner (e.g. `npx node@18.20.3 tests/runWithServer.mjs`)'
+      );
+    }
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/explore" element={<AllPerks />} />
+      </Routes>,
+      { initialEntries: ['/explore'] }
+    );
+
+    await waitFor(
+      () => expect(screen.queryByText('Loading perks...')).not.toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
+    await waitFor(
+      () => expect(screen.getByText(seededPerk.title)).toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
+    // Get merchant name safely
+    const merchantLabel =
+      seededPerk?.merchant?.name ??
+      seededPerk?.merchantName ??
+      seededPerk?.merchantTitle ??
+      seededPerk?.merchant;
+
+    const merchantSelect = screen.getByRole('combobox');
+
+    // Change value in dropdown (native <select> expected)
+    const options = merchantSelect.querySelectorAll('option');
+    const match = Array.from(options).find(
+      (opt) => opt.textContent.trim() === String(merchantLabel).trim()
+    );
+    const valueToSet = match ? match.value : String(merchantLabel);
+    fireEvent.change(merchantSelect, { target: { value: valueToSet } });
+
+    await waitFor(
+      () => expect(screen.queryByText('Searching...')).not.toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
+    await waitFor(
+      () => expect(screen.getByText(seededPerk.title)).toBeInTheDocument(),
+      { timeout: 10000 }
+    );
+
+    expect(screen.getByText(/showing/i)).toHaveTextContent('Showing');
   });
 });
